@@ -27,6 +27,17 @@ function cn(...inputs) {
 }
 
 /**
+ * CYBERSECURITY UTILITIES
+ */
+function sanitizeInput(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/[<>]/g, '') // Basic XSS prevention
+    .replace(/javascript:/gi, '') // Protocol injection
+    .trim();
+}
+
+/**
  * TRANSLATIONS
  */
 const translations = {
@@ -39,6 +50,10 @@ const translations = {
     aesActive: 'AES-256-GCM Active',
     passcodeInfo: 'Your passcode is never stored. Keys are derived in memory using PBKDF2 and discarded when the session ends.',
     location: 'Bou Zadjar Training Station, Algeria',
+    locationLabel: 'Location',
+    skipToApnea: 'Skip to Apnea',
+    searchOnTikTok: 'Search on TikTok',
+    searchOnFacebook: 'Search on Facebook',
     trainer: 'Trainer',
     logger: 'Logger',
     safety: 'Safety',
@@ -130,6 +145,10 @@ const translations = {
     aesActive: 'AES-256-GCM Actif',
     passcodeInfo: 'Votre code n\'est jamais stocké. Les clés sont dérivées en mémoire via PBKDF2 et jetées à la fin de la session.',
     location: 'Station d\'entraînement Bou Zadjar, Algérie',
+    locationLabel: 'Lieu',
+    skipToApnea: 'Passer à l\'Apnée',
+    searchOnTikTok: 'Rechercher sur TikTok',
+    searchOnFacebook: 'Rechercher sur Facebook',
     trainer: 'Entraîneur',
     logger: 'Journal',
     safety: 'Sécurité',
@@ -221,6 +240,10 @@ const translations = {
     aesActive: 'نظام AES-256-GCM نشط',
     passcodeInfo: 'لا يتم تخزين رمز المرور الخاص بك أبدًا. يتم اشتقاق المفاتيح في الذاكرة باستخدام PBKDF2 ويتم التخلص منها عند انتهاء الجلسة.',
     location: 'محطة تدريب بوزجار، الجزائر',
+    locationLabel: 'الموقع',
+    skipToApnea: 'تخطي لكتم النفس',
+    searchOnTikTok: 'بحث في تيك توك',
+    searchOnFacebook: 'بحث في فيسبوك',
     trainer: 'المدرب',
     logger: 'المسجل',
     safety: 'السلامة',
@@ -808,6 +831,12 @@ function ApneaTrainer({ t, onLogSession }) {
     clearInterval(timerRef.current);
   };
 
+  const skipToApnea = () => {
+    if (phase === 'breathe') {
+      setTimeLeft(0);
+    }
+  };
+
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -898,8 +927,14 @@ function ApneaTrainer({ t, onLogSession }) {
             </div>
           </div>
 
-          <div className="w-full flex gap-4">
-            <Button variant="outline" className="flex-1 py-4" onClick={stopSession}>
+          <div className="w-full flex flex-col gap-3">
+            {phase === 'breathe' && (
+              <Button variant="cyan" className="w-full py-4 animate-in slide-in-from-bottom-2" onClick={skipToApnea}>
+                <Zap className="w-5 h-5 fill-current" />
+                {t.skipToApnea}
+              </Button>
+            )}
+            <Button variant="outline" className="w-full py-3 opacity-60 hover:opacity-100" onClick={stopSession}>
               <Square className="w-5 h-5 fill-current" />
               {t.abort}
             </Button>
@@ -977,11 +1012,11 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
     ...preloadData
   });
 
-  // Auto-populate weather if not manual and not already set
+  // Auto-populate weather with debounce (500ms)
   useEffect(() => {
     let isMounted = true;
-    async function updateWeather() {
-      if (!formData.manualWeather && !isEditing) {
+    const timer = setTimeout(async () => {
+      if (!isEditing) {
         try {
           const data = await fetchRealTimeData(formData.lat, formData.lng);
           if (isMounted && data) {
@@ -994,30 +1029,54 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
           }
         }
       }
-    }
-    updateWeather();
-    return () => { isMounted = false; };
-  }, [formData.manualWeather, formData.lat, formData.lng, isEditing]);
+    }, 500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [formData.lat, formData.lng, isEditing]);
 
   const [encryptionStatus, setEncryptionStatus] = useState('idle'); // idle, encrypting, done
   const [ciphertextPreview, setCiphertextPreview] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Debounced input updates for XSS protection
+  const updateField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: sanitizeInput(value) }));
+  };
+
   const handleSave = async () => {
+    if (isSaving) return;
     setIsSaving(true);
     setEncryptionStatus('encrypting');
 
-    const plaintext = JSON.stringify({
-      ...formData,
+    const payload = {
+      distance: formData.distance,
+      duration: formData.duration,
+      location: formData.location,
+      lat: formData.lat,
+      lng: formData.lng,
+      notes: formData.notes,
+      cramps: formData.cramps,
+      windSpeed: formData.windSpeed,
+      weatherCond: formData.weatherCond,
+      airTemp: formData.airTemp,
+      humidity: formData.humidity,
+      seaState: formData.seaState,
+      seaTemp: formData.seaTemp,
+      visibility: formData.visibility,
+      fishStatus: formData.fishStatus,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    const plaintext = JSON.stringify(payload);
 
     await new Promise(r => setTimeout(r, 800));
 
     try {
       const encrypted = await encryptData(masterKey, plaintext);
 
-      // Decompose for visualization
       const binary = atob(encrypted);
       const iv = btoa(binary.slice(0, 12));
       const tag = btoa(binary.slice(-16));
@@ -1028,8 +1087,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
 
       await new Promise(r => setTimeout(r, 1200));
       onSave(encrypted);
-    } catch (e) {
-      console.error(e);
+    } catch (_e) {
       setEncryptionStatus('idle');
     } finally {
       setIsSaving(false);
@@ -1047,7 +1105,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
             <input
               type="number"
               value={formData.distance}
-              onChange={e => setFormData({...formData, distance: e.target.value})}
+              onChange={e => updateField('distance', e.target.value)}
               placeholder="e.g. 500"
               className="w-full bg-black/20 border border-white/10 rounded-lg p-3"
             />
@@ -1057,7 +1115,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
             <input
               type="number"
               value={formData.duration}
-              onChange={e => setFormData({...formData, duration: e.target.value})}
+              onChange={e => updateField('duration', e.target.value)}
               placeholder="e.g. 30"
               className="w-full bg-black/20 border border-white/10 rounded-lg p-3"
             />
@@ -1065,21 +1123,31 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] text-white/40 uppercase font-bold block text-start ps-1">{t.location.split(',')[0]}</label>
+          <label className="text-[10px] text-white/40 uppercase font-bold block text-start ps-1">{t.locationLabel}</label>
           <div className="relative">
             <MapPin className={cn("absolute top-1/2 -translate-y-1/2 w-4 h-4 text-ocean-cyan", t.locale === 'ar' ? 'right-3' : 'left-3')} />
-            <select
+            <input
+              type="text"
               value={formData.location}
-              onChange={e => {
-                const b = BEACHES.find(beach => beach.name === e.target.value);
-                setFormData({...formData, location: b.name, lat: b.lat, lng: b.lng});
-              }}
-              className="w-full bg-black/20 border border-white/10 rounded-lg p-3 ps-10 appearance-none focus:ring-1 focus:ring-ocean-cyan outline-none"
-            >
-              {BEACHES.map(b => (
-                <option key={b.name} value={b.name} className="bg-ocean-deep text-white text-start">{b.name}</option>
-              ))}
-            </select>
+              onChange={e => updateField('location', e.target.value)}
+              className="w-full bg-black/20 border border-white/10 rounded-lg p-3 ps-10 focus:ring-1 focus:ring-ocean-cyan outline-none"
+              placeholder={t.locationLabel}
+            />
+            <div className="absolute top-1/2 -translate-y-1/2 end-3">
+               <select
+                 className="bg-transparent text-[10px] text-ocean-cyan font-bold outline-none cursor-pointer"
+                 onChange={e => {
+                   const b = BEACHES.find(beach => beach.name === e.target.value);
+                   if (b) setFormData(prev => ({ ...prev, location: b.name, lat: b.lat, lng: b.lng }));
+                 }}
+                 value=""
+               >
+                 <option value="" disabled>ORAN SPOTS</option>
+                 {BEACHES.map(b => (
+                   <option key={b.name} value={b.name} className="bg-ocean-deep text-white">{b.name}</option>
+                 ))}
+               </select>
+            </div>
           </div>
         </div>
 
@@ -1096,20 +1164,20 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
 
         <div className="flex gap-2">
            <a
-             href={`https://www.facebook.com/search/top?q=${encodeURIComponent('حالة البحر ' + formData.location)}`}
+             href={`https://www.facebook.com/search/top?q=${encodeURIComponent(formData.location + ' البحر')}`}
              target="_blank"
              rel="noopener noreferrer"
              className="flex-1 bg-[#1877F2]/10 border border-[#1877F2]/20 rounded-lg py-2 text-[10px] font-bold text-[#1877F2] flex items-center justify-center gap-2"
            >
-              {t.fbSearch}
+              {t.searchOnFacebook}
            </a>
            <a
-             href={`https://www.tiktok.com/search?q=${encodeURIComponent('حالة البحر ' + formData.location)}`}
+             href={`https://www.tiktok.com/search?q=${encodeURIComponent(formData.location + ' البحر')}`}
              target="_blank"
              rel="noopener noreferrer"
              className="flex-1 bg-black/20 border border-white/10 rounded-lg py-2 text-[10px] font-bold text-white flex items-center justify-center gap-2"
            >
-              {t.ttSearch}
+              {t.searchOnTikTok}
            </a>
         </div>
 
@@ -1117,7 +1185,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
           <label className="text-[10px] text-white/40 uppercase font-bold block text-start">{t.trainingNotes}</label>
           <textarea
             value={formData.notes}
-            onChange={e => setFormData({...formData, notes: e.target.value})}
+            onChange={e => updateField('notes', e.target.value)}
             placeholder={t.notesPlaceholder}
             className="w-full bg-black/20 border border-white/10 rounded-lg p-3 min-h-[80px]"
           />
@@ -1138,72 +1206,64 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
         </label>
 
         <div className="pt-4 space-y-4 border-t border-white/5">
-          <label className="flex items-center justify-between p-3 bg-ocean-cyan/5 border border-ocean-cyan/10 rounded-xl cursor-pointer">
-             <div className="text-start">
-                <div className="text-xs font-bold text-ocean-cyan">{t.customizeWeather}</div>
-             </div>
-             <input
-                type="checkbox"
-                checked={formData.manualWeather || isEditing}
-                disabled={isEditing}
-                onChange={e => setFormData({...formData, manualWeather: e.target.checked})}
-                className="w-5 h-5 rounded border-white/10 bg-black/20 text-ocean-cyan focus:ring-ocean-cyan"
-             />
-          </label>
+           <div className="flex items-center gap-2 text-ocean-cyan/60 mb-2">
+              <Activity className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t.logger} Marine Intel</span>
+           </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" dir="ltr">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" dir="ltr">
              <WeatherMetricField
                 label={t.windSpeed}
                 value={formData.windSpeed}
                 unit={t.kmh}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, windSpeed: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.weatherCondition}
                 value={formData.weatherCond}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, weatherCond: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.airTemp}
                 value={formData.airTemp}
                 unit="°C"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, airTemp: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.humidity}
                 value={formData.humidity}
                 unit="%"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, humidity: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.seaState}
                 value={formData.seaState}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, seaState: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.seaTemp}
                 value={formData.seaTemp}
                 unit="°C"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, seaTemp: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.visibility}
                 value={formData.visibility}
                 unit="km"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, visibility: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.fishActivity}
                 value={t[formData.fishStatus] || formData.fishStatus}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, fishStatus: v})}
+                disabled
+                onChange={() => {}}
              />
           </div>
         </div>
