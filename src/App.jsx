@@ -319,6 +319,39 @@ const BEACHES = [
 ];
 
 /**
+ * DETERMINISTIC WEATHER FALLBACK (Seasonal Simulator)
+ */
+function getDeterministicFallback(lat, lng) {
+  const date = new Date();
+  const month = date.getMonth();
+  const seed = Math.abs(Math.floor(lat + lng + date.getDate())) % 100;
+
+  const airTemps = [16, 17, 19, 22, 25, 29, 33, 34, 30, 25, 20, 17];
+  const seaTemps = [15, 14, 15, 17, 19, 22, 24, 26, 24, 21, 18, 16];
+
+  const airTemp = airTemps[month] + (seed % 4) - 2;
+  const seaTemp = seaTemps[month] + (seed % 2);
+  const windSpeed = 10 + (seed % 20);
+  const waveHeight = (windSpeed / 25).toFixed(1);
+
+  let fishStatus = 'fishModerate';
+  if (seaTemp >= 18 && seaTemp <= 24 && waveHeight < 0.8) fishStatus = 'fishHigh';
+  else if (waveHeight > 1.5) fishStatus = 'fishLow';
+
+  return {
+    airTemp,
+    humidity: 60 + (seed % 20),
+    windSpeed,
+    weatherCond: windSpeed > 25 ? 'Windy 💨' : 'Clear ✨',
+    visibility: 15 - (seed % 5),
+    seaTemp,
+    waveHeight,
+    seaState: waveHeight < 0.5 ? 'Calm 🌊' : waveHeight < 1.2 ? 'Moderate 🌊' : 'Rough 🚫',
+    fishStatus
+  };
+}
+
+/**
  * REAL-TIME WEATHER & MARINE DATA (Open-Meteo)
  */
 async function fetchRealTimeData(lat, lng) {
@@ -326,14 +359,19 @@ async function fetchRealTimeData(lat, lng) {
     const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,visibility&timezone=auto`;
     const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}&current=wave_height,sea_surface_temperature`;
 
-    const [fRes, mRes] = await Promise.all([fetch(forecastUrl), fetch(marineUrl)]);
-    const fData = await fRes.json();
-    const mData = await mRes.json();
+    const responses = await Promise.allSettled([
+      fetch(forecastUrl).then(r => r.json()),
+      fetch(marineUrl).then(r => r.json())
+    ]);
+
+    const fData = responses[0].status === 'fulfilled' ? responses[0].value : null;
+    const mData = responses[1].status === 'fulfilled' ? responses[1].value : null;
+
+    if (!fData || !mData) throw new Error("Partial API Failure");
 
     const curr = fData.current;
     const mar = mData.current;
 
-    // Mapping weather codes to icons/text
     const weatherMap = {
       0: 'Sunny ☀️', 1: 'Mainly Clear 🌤️', 2: 'Partly Cloudy ⛅', 3: 'Overcast ☁️',
       45: 'Foggy 🌫️', 48: 'Rime Fog 🌫️', 51: 'Drizzle 🌧️', 61: 'Rain 🌧️',
@@ -344,7 +382,6 @@ async function fetchRealTimeData(lat, lng) {
     const seaTemp = Math.round(mar.sea_surface_temperature);
     const waveHeight = mar.wave_height;
 
-    // Fish Status Logic
     let fishStatus = 'fishModerate';
     if (seaTemp >= 18 && seaTemp <= 24 && waveHeight < 0.8) fishStatus = 'fishHigh';
     else if (waveHeight > 1.5) fishStatus = 'fishLow';
@@ -354,15 +391,14 @@ async function fetchRealTimeData(lat, lng) {
       humidity: curr.relative_humidity_2m,
       windSpeed: Math.round(curr.wind_speed_10m),
       weatherCond: weatherMap[curr.weather_code] || 'Clear ✨',
-      visibility: Math.round(curr.visibility / 1000), // convert to km
+      visibility: Math.round(curr.visibility / 1000),
       seaTemp,
       waveHeight,
       seaState: waveHeight < 0.5 ? 'Calm 🌊' : waveHeight < 1.2 ? 'Moderate 🌊' : 'Rough 🚫',
       fishStatus
     };
-  } catch (e) {
-    console.error("API Fetch Error", e);
-    return null;
+  } catch (_e) {
+    return getDeterministicFallback(lat, lng);
   }
 }
 
@@ -943,15 +979,24 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
 
   // Auto-populate weather if not manual and not already set
   useEffect(() => {
+    let isMounted = true;
     async function updateWeather() {
       if (!formData.manualWeather && !isEditing) {
-        const data = await fetchRealTimeData(formData.lat, formData.lng);
-        if (data) {
-          setFormData(prev => ({ ...prev, ...data }));
+        try {
+          const data = await fetchRealTimeData(formData.lat, formData.lng);
+          if (isMounted && data) {
+            setFormData(prev => ({ ...prev, ...data }));
+          }
+        } catch (_e) {
+          if (isMounted) {
+            const fallback = getDeterministicFallback(formData.lat, formData.lng);
+            setFormData(prev => ({ ...prev, ...fallback }));
+          }
         }
       }
     }
     updateWeather();
+    return () => { isMounted = false; };
   }, [formData.manualWeather, formData.lat, formData.lng, isEditing]);
 
   const [encryptionStatus, setEncryptionStatus] = useState('idle'); // idle, encrypting, done
@@ -1226,15 +1271,15 @@ function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
     const decryptAll = async () => {
       setIsDecrypting(true);
       try {
-        const results = await Promise.all(
+      const results = await Promise.allSettled(
           logs.map(async (l) => {
             const raw = await decryptData(masterKey, l);
             return JSON.parse(raw);
           })
         );
-        setDecryptedLogs(results);
-      } catch (e) {
-        console.error(e);
+      setDecryptedLogs(results.filter(r => r.status === 'fulfilled').map(r => r.value));
+    } catch (_e) {
+      setDecryptedLogs([]);
       } finally {
         setIsDecrypting(false);
       }
