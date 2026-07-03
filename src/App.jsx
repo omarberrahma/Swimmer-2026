@@ -93,6 +93,17 @@ const translations = {
     rule1: 'Strong currents near the rocky outcrops. Avoid diving during high swell.',
     rule2: 'Local fishing boats pass frequently. Use a high-visibility surface buoy.',
     rule3: "The 'Blue Hole' equivalent near the cliff is for advanced divers only (25m+).",
+    customizeWeather: 'Customize Weather Metrics Manually',
+    windSpeed: 'Wind Speed',
+    weatherCondition: 'Weather Condition',
+    airTemp: 'Air Temperature',
+    seaState: 'Sea State',
+    seaTemp: 'Sea Temperature',
+    visibility: 'Visibility',
+    kmh: 'km/h',
+    meters: 'm',
+    edit: 'Edit',
+    saveChanges: 'Save Changes',
     calfCramp: 'Calf Cramp',
     footCramp: 'Foot Arch Cramp',
     calfSteps: [
@@ -166,6 +177,17 @@ const translations = {
     rule1: 'Courants forts près des rochers. Évitez de plonger en cas de forte houle.',
     rule2: 'Les bateaux de pêche passent souvent. Utilisez une bouée de surface visible.',
     rule3: "L'équivalent du 'Blue Hole' près de la falaise est réservé aux plongeurs confirmés (25m+).",
+    customizeWeather: 'Personnaliser les métriques météo manuellement',
+    windSpeed: 'Vitesse du vent',
+    weatherCondition: 'Condition météo',
+    airTemp: 'Température de l\'air',
+    seaState: 'État de la mer',
+    seaTemp: 'Température de la mer',
+    visibility: 'Visibilité',
+    kmh: 'km/h',
+    meters: 'm',
+    edit: 'Modifier',
+    saveChanges: 'Enregistrer les modifications',
     calfCramp: 'Crampe du mollet',
     footCramp: 'Crampe de la voûte plantaire',
     calfSteps: [
@@ -239,6 +261,17 @@ const translations = {
     rule1: 'تيارات قوية بالقرب من النتوءات الصخرية. تجنب الغوص أثناء الأمواج العالية.',
     rule2: 'تمر قوارب الصيد المحلية بشكل متكرر. استخدم عوامة سطحية عالية الوضوح.',
     rule3: "ما يعادل 'الثقب الأزرق' بالقرب من الجرف هو للغواصين المتقدمين فقط (25م+).",
+    customizeWeather: 'تخصيص مقاييس الطقس يدويًا',
+    windSpeed: 'سرعة الرياح',
+    weatherCondition: 'حالة الطقس',
+    airTemp: 'درجة حرارة الهواء',
+    seaState: 'حالة البحر',
+    seaTemp: 'درجة حرارة البحر',
+    visibility: 'مدى الرؤية',
+    kmh: 'كم/ساعة',
+    meters: 'متر',
+    edit: 'تعديل',
+    saveChanges: 'حفظ التعديلات',
     calfCramp: 'تشنج ربلة الساق',
     footCramp: 'تشنج قوس القدم',
     calfSteps: [
@@ -255,6 +288,55 @@ const translations = {
     ]
   }
 };
+
+/**
+ * METEOROLOGICAL SIMULATOR (v3.1)
+ * Deterministic weather based on date and spot.
+ */
+function getWeatherAndSeaState(dateStr, spotId) {
+  const date = new Date(dateStr);
+  const month = date.getMonth(); // 0-11
+  const day = date.getDate();
+
+  // Hash function for pseudo-randomness based on date/spot
+  const seed = (month * 31 + day + spotId.length) % 100;
+
+  // Seasonal Air Temp Base
+  const airTempBase = [15, 16, 18, 22, 25, 28, 32, 33, 29, 24, 19, 16];
+  const airTemp = airTempBase[month] + (seed % 5) - 2;
+
+  // Seasonal Sea Temp Base
+  const seaTempBase = [15, 14, 15, 17, 19, 22, 24, 25, 23, 21, 18, 16];
+  const seaTemp = seaTempBase[month] + (seed % 2);
+
+  // Wind Speed (Deterministic)
+  const windSpeed = 5 + (seed % 25); // 5 to 30 km/h
+
+  // Weather Condition
+  let weatherCond = 'Sunny ☀️';
+  if (windSpeed > 22) weatherCond = 'Windy 💨';
+  else if (windSpeed > 15) weatherCond = 'Breezy 🍃';
+  else if (seed % 10 > 7) weatherCond = 'Cloudy ⛅';
+
+  // Sea State
+  let seaState = 'Calm 🌊';
+  if (windSpeed > 25) seaState = 'Rough 🚫';
+  else if (windSpeed > 15) seaState = 'Moderate Swell 🌊';
+
+  // Visibility (Base 20m, decays with rough sea)
+  let visibility = 20 - (windSpeed / 3);
+  if (seaState === 'Rough 🚫') visibility = Math.max(2, visibility - 5);
+  visibility = Math.round(visibility);
+
+  return {
+    windSpeed,
+    weatherCond,
+    airTemp,
+    seaState,
+    seaTemp,
+    visibility
+  };
+}
 
 /**
  * CRYPTOGRAPHY UTILITIES
@@ -527,8 +609,15 @@ export default function App() {
             t={t}
             masterKey={masterKey}
             preloadData={preloadData}
+            isEditing={!!preloadData?.isEditing}
             onSave={(newLog) => {
-              setLogs(prev => [newLog, ...prev]);
+              if (preloadData?.isEditing) {
+                const newLogs = [...logs];
+                newLogs[preloadData.index] = newLog;
+                setLogs(newLogs);
+              } else {
+                setLogs(prev => [newLog, ...prev]);
+              }
               setActiveTab('history');
               setPreloadData(null);
             }}
@@ -542,6 +631,10 @@ export default function App() {
             t={t}
             logs={logs}
             masterKey={masterKey}
+            onEdit={(index, data) => {
+               setPreloadData({ ...data, index, isEditing: true });
+               setActiveTab('logger');
+            }}
             onDelete={(index) => {
               const newLogs = [...logs];
               newLogs.splice(index, 1);
@@ -782,15 +875,30 @@ function ApneaTrainer({ t, onLogSession }) {
 /**
  * SECURE LOGGER COMPONENT
  */
-function SecureLogger({ t, masterKey, preloadData, onSave }) {
+function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) {
   const [formData, setFormData] = useState({
     distance: '',
     duration: '',
     location: 'Bou Zadjar Beach',
     notes: '',
     cramps: false,
+    manualWeather: false,
+    windSpeed: '',
+    weatherCond: '',
+    airTemp: '',
+    seaState: '',
+    seaTemp: '',
+    visibility: '',
     ...preloadData
   });
+
+  // Auto-populate weather if not manual and not already set
+  useEffect(() => {
+    if (!formData.manualWeather && !isEditing && !formData.windSpeed) {
+      const simulated = getWeatherAndSeaState(new Date().toISOString(), formData.location);
+      setFormData(prev => ({ ...prev, ...simulated }));
+    }
+  }, [formData.manualWeather, formData.location, isEditing, formData.windSpeed]);
 
   const [encryptionStatus, setEncryptionStatus] = useState('idle'); // idle, encrypting, done
   const [ciphertextPreview, setCiphertextPreview] = useState(null);
@@ -894,6 +1002,64 @@ function SecureLogger({ t, masterKey, preloadData, onSave }) {
           <AlertTriangle className={cn("w-5 h-5", formData.cramps ? "text-rose-500" : "text-white/10")} />
         </label>
 
+        <div className="pt-4 space-y-4 border-t border-white/5">
+          <label className="flex items-center justify-between p-3 bg-ocean-cyan/5 border border-ocean-cyan/10 rounded-xl cursor-pointer">
+             <div className="text-start">
+                <div className="text-xs font-bold text-ocean-cyan">{t.customizeWeather}</div>
+             </div>
+             <input
+                type="checkbox"
+                checked={formData.manualWeather || isEditing}
+                disabled={isEditing}
+                onChange={e => setFormData({...formData, manualWeather: e.target.checked})}
+                className="w-5 h-5 rounded border-white/10 bg-black/20 text-ocean-cyan focus:ring-ocean-cyan"
+             />
+          </label>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+             <WeatherMetricField
+                label={t.windSpeed}
+                value={formData.windSpeed}
+                unit={t.kmh}
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, windSpeed: v})}
+             />
+             <WeatherMetricField
+                label={t.weatherCondition}
+                value={formData.weatherCond}
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, weatherCond: v})}
+             />
+             <WeatherMetricField
+                label={t.airTemp}
+                value={formData.airTemp}
+                unit="°C"
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, airTemp: v})}
+             />
+             <WeatherMetricField
+                label={t.seaState}
+                value={formData.seaState}
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, seaState: v})}
+             />
+             <WeatherMetricField
+                label={t.seaTemp}
+                value={formData.seaTemp}
+                unit="°C"
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, seaTemp: v})}
+             />
+             <WeatherMetricField
+                label={t.visibility}
+                value={formData.visibility}
+                unit={t.meters}
+                disabled={!formData.manualWeather && !isEditing}
+                onChange={v => setFormData({...formData, visibility: v})}
+             />
+          </div>
+        </div>
+
         <Button
           variant="cyan"
           className="w-full py-4 mt-4"
@@ -901,7 +1067,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave }) {
           disabled={isSaving}
         >
           {isSaving ? <SVGLoader /> : <Shield className="w-5 h-5" />}
-          {t.encryptStore}
+          {isEditing ? t.saveChanges : t.encryptStore}
         </Button>
       </Card>
 
@@ -949,7 +1115,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave }) {
 /**
  * TRAINING HISTORY COMPONENT
  */
-function TrainingHistory({ t, logs, masterKey, onDelete }) {
+function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
   const [decryptedLogs, setDecryptedLogs] = useState([]);
   const [isDecrypting, setIsDecrypting] = useState(false);
 
@@ -1014,12 +1180,21 @@ function TrainingHistory({ t, logs, masterKey, onDelete }) {
                       <p className="text-[10px] text-white/40">{new Date(log.timestamp).toLocaleDateString()} @ {log.location || t.unknown}</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => onDelete(i)}
-                    className="p-2 text-white/10 hover:text-rose-500 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onEdit(i, decryptedLogs[i])}
+                      className="p-2 text-white/10 hover:text-ocean-cyan transition-colors"
+                      title={t.edit}
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(i)}
+                      className="p-2 text-white/10 hover:text-rose-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                </div>
 
                <div className="grid grid-cols-3 gap-2 mt-4">
@@ -1032,7 +1207,7 @@ function TrainingHistory({ t, logs, masterKey, onDelete }) {
                   {log.duration && (
                     <div className="bg-black/20 p-2 rounded-lg text-center">
                       <div className="text-[8px] text-white/40 uppercase">{t.duration.split(' ')[0]}</div>
-                      <div className="text-xs font-bold text-ocean-cyan">{log.duration}m</div>
+                      <div className="text-xs font-bold text-ocean-cyan">{log.duration} min</div>
                     </div>
                   )}
                   {log.rounds && (
@@ -1053,6 +1228,21 @@ function TrainingHistory({ t, logs, masterKey, onDelete }) {
                     {t.crampsReported}
                  </div>
                )}
+
+               <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-2">
+                  <div className="text-[8px] text-white/30">
+                    <div className="uppercase">{t.windSpeed}</div>
+                    <div className="text-white/60 font-mono">{log.windSpeed} {t.kmh}</div>
+                  </div>
+                  <div className="text-[8px] text-white/30">
+                    <div className="uppercase">{t.seaState}</div>
+                    <div className="text-white/60 font-mono">{log.seaState}</div>
+                  </div>
+                  <div className="text-[8px] text-white/30">
+                    <div className="uppercase">{t.visibility}</div>
+                    <div className="text-white/60 font-mono">{log.visibility}{t.meters}</div>
+                  </div>
+               </div>
             </Card>
           ))}
         </div>
@@ -1292,6 +1482,30 @@ function SVGLoader({ className }) {
         />
       </circle>
     </svg>
+  );
+}
+
+/**
+ * WEATHER METRIC FIELD COMPONENT
+ */
+function WeatherMetricField({ label, value, unit, disabled, onChange }) {
+  return (
+    <div className="space-y-1">
+       <label className="text-[9px] text-white/40 uppercase font-bold block text-start truncate">{label}</label>
+       <div className="relative">
+          <input
+            type="text"
+            value={value}
+            disabled={disabled}
+            onChange={e => onChange(e.target.value)}
+            className={cn(
+              "w-full bg-black/20 border border-white/10 rounded-lg p-2 text-xs font-mono transition-colors",
+              disabled ? "opacity-50" : "focus:border-ocean-cyan/50"
+            )}
+          />
+          {unit && <span className="absolute end-2 top-1/2 -translate-y-1/2 text-[8px] text-white/20">{unit}</span>}
+       </div>
+    </div>
   );
 }
 
