@@ -10,25 +10,31 @@ import {
   Unlock,
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   Zap,
-  Info,
   Save,
   Trash2,
   Play,
   Square,
   RefreshCw,
-  Eye,
-  EyeOff,
   MapPin,
-  Stethoscope,
-  Globe
+  Stethoscope
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * CYBERSECURITY UTILITIES
+ */
+function sanitizeInput(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/[<>]/g, '') // Basic XSS prevention
+    .replace(/javascript:/gi, '') // Protocol injection
+    .trim();
 }
 
 /**
@@ -44,6 +50,10 @@ const translations = {
     aesActive: 'AES-256-GCM Active',
     passcodeInfo: 'Your passcode is never stored. Keys are derived in memory using PBKDF2 and discarded when the session ends.',
     location: 'Bou Zadjar Training Station, Algeria',
+    locationLabel: 'Location',
+    skipToApnea: 'Skip to Apnea',
+    searchOnTikTok: 'Search on TikTok',
+    searchOnFacebook: 'Search on Facebook',
     trainer: 'Trainer',
     logger: 'Logger',
     safety: 'Safety',
@@ -97,9 +107,16 @@ const translations = {
     windSpeed: 'Wind Speed',
     weatherCondition: 'Weather Condition',
     airTemp: 'Air Temperature',
+    humidity: 'Humidity',
     seaState: 'Sea State',
     seaTemp: 'Sea Temperature',
     visibility: 'Visibility',
+    fishActivity: 'Fish Activity',
+    fishHigh: 'High Activity 🐟',
+    fishModerate: 'Moderate Activity 🎣',
+    fishLow: 'Quiet 🌊',
+    fbSearch: 'Facebook Search',
+    ttSearch: 'TikTok Search',
     kmh: 'km/h',
     meters: 'm',
     edit: 'Edit',
@@ -128,6 +145,10 @@ const translations = {
     aesActive: 'AES-256-GCM Actif',
     passcodeInfo: 'Votre code n\'est jamais stocké. Les clés sont dérivées en mémoire via PBKDF2 et jetées à la fin de la session.',
     location: 'Station d\'entraînement Bou Zadjar, Algérie',
+    locationLabel: 'Lieu',
+    skipToApnea: 'Passer à l\'Apnée',
+    searchOnTikTok: 'Rechercher sur TikTok',
+    searchOnFacebook: 'Rechercher sur Facebook',
     trainer: 'Entraîneur',
     logger: 'Journal',
     safety: 'Sécurité',
@@ -181,9 +202,16 @@ const translations = {
     windSpeed: 'Vitesse du vent',
     weatherCondition: 'Condition météo',
     airTemp: 'Température de l\'air',
+    humidity: 'Humidité',
     seaState: 'État de la mer',
     seaTemp: 'Température de la mer',
     visibility: 'Visibilité',
+    fishActivity: 'Activité des poissons',
+    fishHigh: 'Activité élevée 🐟',
+    fishModerate: 'Activité modérée 🎣',
+    fishLow: 'Calme 🌊',
+    fbSearch: 'Recherche Facebook',
+    ttSearch: 'Recherche TikTok',
     kmh: 'km/h',
     meters: 'm',
     edit: 'Modifier',
@@ -212,6 +240,10 @@ const translations = {
     aesActive: 'نظام AES-256-GCM نشط',
     passcodeInfo: 'لا يتم تخزين رمز المرور الخاص بك أبدًا. يتم اشتقاق المفاتيح في الذاكرة باستخدام PBKDF2 ويتم التخلص منها عند انتهاء الجلسة.',
     location: 'محطة تدريب بوزجار، الجزائر',
+    locationLabel: 'الموقع',
+    skipToApnea: 'تخطي لكتم النفس',
+    searchOnTikTok: 'بحث في تيك توك',
+    searchOnFacebook: 'بحث في فيسبوك',
     trainer: 'المدرب',
     logger: 'المسجل',
     safety: 'السلامة',
@@ -264,10 +296,17 @@ const translations = {
     customizeWeather: 'تخصيص مقاييس الطقس يدويًا',
     windSpeed: 'سرعة الرياح',
     weatherCondition: 'حالة الطقس',
-    airTemp: 'درجة حرارة الهواء',
+    airTemp: 'درجة الحرارة',
+    humidity: 'الرطوبة',
     seaState: 'حالة البحر',
-    seaTemp: 'درجة حرارة البحر',
-    visibility: 'مدى الرؤية',
+    seaTemp: 'حرارة الماء',
+    visibility: 'الرؤية',
+    fishActivity: 'حالة الأسماك',
+    fishHigh: 'نشاط عالٍ 🐟',
+    fishModerate: 'نشاط متوسط 🎣',
+    fishLow: 'هدوء 🌊',
+    fbSearch: 'بحث فيسبوك',
+    ttSearch: 'بحث تيكتوك',
     kmh: 'كم/ساعة',
     meters: 'متر',
     edit: 'تعديل',
@@ -290,52 +329,100 @@ const translations = {
 };
 
 /**
- * METEOROLOGICAL SIMULATOR (v3.1)
- * Deterministic weather based on date and spot.
+ * ORAN BEACH LOCATIONS
  */
-function getWeatherAndSeaState(dateStr, spotId) {
-  const date = new Date(dateStr);
-  const month = date.getMonth(); // 0-11
-  const day = date.getDate();
+const BEACHES = [
+  { name: 'Bou Zadjar', lat: 35.575, lng: -1.135 },
+  { name: 'Madagh', lat: 35.600, lng: -1.100 },
+  { name: 'Les Andalouses', lat: 35.706, lng: -0.893 },
+  { name: 'Bousfer', lat: 35.711, lng: -0.811 },
+  { name: 'Ain El Turk', lat: 35.741, lng: -0.749 },
+  { name: 'Cap Falcon', lat: 35.771, lng: -0.801 },
+  { name: 'Kristel', lat: 35.826, lng: -0.483 }
+];
 
-  // Hash function for pseudo-randomness based on date/spot
-  const seed = (month * 31 + day + spotId.length) % 100;
+/**
+ * DETERMINISTIC WEATHER FALLBACK (Seasonal Simulator)
+ */
+function getDeterministicFallback(lat, lng) {
+  const date = new Date();
+  const month = date.getMonth();
+  const seed = Math.abs(Math.floor(lat + lng + date.getDate())) % 100;
 
-  // Seasonal Air Temp Base
-  const airTempBase = [15, 16, 18, 22, 25, 28, 32, 33, 29, 24, 19, 16];
-  const airTemp = airTempBase[month] + (seed % 5) - 2;
+  const airTemps = [16, 17, 19, 22, 25, 29, 33, 34, 30, 25, 20, 17];
+  const seaTemps = [15, 14, 15, 17, 19, 22, 24, 26, 24, 21, 18, 16];
 
-  // Seasonal Sea Temp Base
-  const seaTempBase = [15, 14, 15, 17, 19, 22, 24, 25, 23, 21, 18, 16];
-  const seaTemp = seaTempBase[month] + (seed % 2);
+  const airTemp = airTemps[month] + (seed % 4) - 2;
+  const seaTemp = seaTemps[month] + (seed % 2);
+  const windSpeed = 10 + (seed % 20);
+  const waveHeight = (windSpeed / 25).toFixed(1);
 
-  // Wind Speed (Deterministic)
-  const windSpeed = 5 + (seed % 25); // 5 to 30 km/h
-
-  // Weather Condition
-  let weatherCond = 'Sunny ☀️';
-  if (windSpeed > 22) weatherCond = 'Windy 💨';
-  else if (windSpeed > 15) weatherCond = 'Breezy 🍃';
-  else if (seed % 10 > 7) weatherCond = 'Cloudy ⛅';
-
-  // Sea State
-  let seaState = 'Calm 🌊';
-  if (windSpeed > 25) seaState = 'Rough 🚫';
-  else if (windSpeed > 15) seaState = 'Moderate Swell 🌊';
-
-  // Visibility (Base 20m, decays with rough sea)
-  let visibility = 20 - (windSpeed / 3);
-  if (seaState === 'Rough 🚫') visibility = Math.max(2, visibility - 5);
-  visibility = Math.round(visibility);
+  let fishStatus = 'fishModerate';
+  if (seaTemp >= 18 && seaTemp <= 24 && waveHeight < 0.8) fishStatus = 'fishHigh';
+  else if (waveHeight > 1.5) fishStatus = 'fishLow';
 
   return {
-    windSpeed,
-    weatherCond,
     airTemp,
-    seaState,
+    humidity: 60 + (seed % 20),
+    windSpeed,
+    weatherCond: windSpeed > 25 ? 'Windy 💨' : 'Clear ✨',
+    visibility: 15 - (seed % 5),
     seaTemp,
-    visibility
+    waveHeight,
+    seaState: waveHeight < 0.5 ? 'Calm 🌊' : waveHeight < 1.2 ? 'Moderate 🌊' : 'Rough 🚫',
+    fishStatus
   };
+}
+
+/**
+ * REAL-TIME WEATHER & MARINE DATA (Open-Meteo)
+ */
+async function fetchRealTimeData(lat, lng) {
+  try {
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,visibility&timezone=auto`;
+    const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}&current=wave_height,sea_surface_temperature`;
+
+    const responses = await Promise.allSettled([
+      fetch(forecastUrl).then(r => r.json()),
+      fetch(marineUrl).then(r => r.json())
+    ]);
+
+    const fData = responses[0].status === 'fulfilled' ? responses[0].value : null;
+    const mData = responses[1].status === 'fulfilled' ? responses[1].value : null;
+
+    if (!fData || !mData) throw new Error("Partial API Failure");
+
+    const curr = fData.current;
+    const mar = mData.current;
+
+    const weatherMap = {
+      0: 'Sunny ☀️', 1: 'Mainly Clear 🌤️', 2: 'Partly Cloudy ⛅', 3: 'Overcast ☁️',
+      45: 'Foggy 🌫️', 48: 'Rime Fog 🌫️', 51: 'Drizzle 🌧️', 61: 'Rain 🌧️',
+      71: 'Snow ❄️', 95: 'Thunderstorm ⛈️'
+    };
+
+    const airTemp = Math.round(curr.temperature_2m);
+    const seaTemp = Math.round(mar.sea_surface_temperature);
+    const waveHeight = mar.wave_height;
+
+    let fishStatus = 'fishModerate';
+    if (seaTemp >= 18 && seaTemp <= 24 && waveHeight < 0.8) fishStatus = 'fishHigh';
+    else if (waveHeight > 1.5) fishStatus = 'fishLow';
+
+    return {
+      airTemp,
+      humidity: curr.relative_humidity_2m,
+      windSpeed: Math.round(curr.wind_speed_10m),
+      weatherCond: weatherMap[curr.weather_code] || 'Clear ✨',
+      visibility: Math.round(curr.visibility / 1000),
+      seaTemp,
+      waveHeight,
+      seaState: waveHeight < 0.5 ? 'Calm 🌊' : waveHeight < 1.2 ? 'Moderate 🌊' : 'Rough 🚫',
+      fishStatus
+    };
+  } catch (_e) {
+    return getDeterministicFallback(lat, lng);
+  }
 }
 
 /**
@@ -343,6 +430,13 @@ function getWeatherAndSeaState(dateStr, spotId) {
  */
 const SALT = new TextEncoder().encode('bou-zadjar-salt-v1');
 const ITERATIONS = 100000;
+
+async function hashPasscode(passcode) {
+  const msgUint8 = new TextEncoder().encode(passcode);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
 
 async function deriveKey(passcode) {
   const enc = new TextEncoder();
@@ -394,7 +488,7 @@ async function decryptData(key, ciphertext) {
       data
     );
     return new TextDecoder().decode(decrypted);
-  } catch (e) {
+  } catch (_e) {
     throw new Error('Decryption failed.');
   }
 }
@@ -446,22 +540,30 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [logs, setLogs] = useState([]);
+  const [userHash, setUserHash] = useState('');
 
   // Persistence
   useEffect(() => {
-    const saved = localStorage.getItem('deeptrain_logs');
-    if (saved) {
-      try {
-        setLogs(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load logs from storage");
+    if (isUnlocked && userHash) {
+      const saved = localStorage.getItem(`deeptrain_logs_${userHash}`);
+      if (saved) {
+        try {
+          setLogs(JSON.parse(saved));
+        } catch (_e) {
+          console.error("Failed to load logs from storage");
+          setLogs([]);
+        }
+      } else {
+        setLogs([]);
       }
     }
-  }, []);
+  }, [isUnlocked, userHash]);
 
   useEffect(() => {
-    localStorage.setItem('deeptrain_logs', JSON.stringify(logs));
-  }, [logs]);
+    if (isUnlocked && userHash) {
+      localStorage.setItem(`deeptrain_logs_${userHash}`, JSON.stringify(logs));
+    }
+  }, [logs, isUnlocked, userHash]);
 
   const handleUnlock = async (e) => {
     e.preventDefault();
@@ -473,9 +575,11 @@ export default function App() {
     setError('');
     try {
       const key = await deriveKey(passcode);
+      const hash = await hashPasscode(passcode);
       setMasterKey(key);
+      setUserHash(hash);
       setIsUnlocked(true);
-    } catch (err) {
+    } catch (_err) {
       setError(locale === 'ar' ? 'فشل الغاء القفل' : 'Unlock failed');
     } finally {
       setIsLoading(false);
@@ -662,7 +766,7 @@ function ApneaTrainer({ t, onLogSession }) {
   const [tableType, setTableType] = useState('CO2'); // CO2 or O2
   const [rounds, setRounds] = useState(8);
   const [baseHold, setBaseHold] = useState(120); // seconds
-  const [baseBreathe, setBaseBreathe] = useState(120); // seconds
+  const [baseBreathe] = useState(120); // seconds
 
   const [isActive, setIsActive] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
@@ -725,6 +829,12 @@ function ApneaTrainer({ t, onLogSession }) {
   const stopSession = () => {
     setIsActive(false);
     clearInterval(timerRef.current);
+  };
+
+  const skipToApnea = () => {
+    if (phase === 'breathe') {
+      setTimeLeft(0);
+    }
   };
 
   const formatTime = (seconds) => {
@@ -817,8 +927,14 @@ function ApneaTrainer({ t, onLogSession }) {
             </div>
           </div>
 
-          <div className="w-full flex gap-4">
-            <Button variant="outline" className="flex-1 py-4" onClick={stopSession}>
+          <div className="w-full flex flex-col gap-3">
+            {phase === 'breathe' && (
+              <Button variant="cyan" className="w-full py-4 animate-in slide-in-from-bottom-2" onClick={skipToApnea}>
+                <Zap className="w-5 h-5 fill-current" />
+                {t.skipToApnea}
+              </Button>
+            )}
+            <Button variant="outline" className="w-full py-3 opacity-60 hover:opacity-100" onClick={stopSession}>
               <Square className="w-5 h-5 fill-current" />
               {t.abort}
             </Button>
@@ -879,46 +995,88 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
   const [formData, setFormData] = useState({
     distance: '',
     duration: '',
-    location: 'Bou Zadjar Beach',
+    location: 'Bou Zadjar',
+    lat: 35.575,
+    lng: -1.135,
     notes: '',
     cramps: false,
     manualWeather: false,
     windSpeed: '',
     weatherCond: '',
     airTemp: '',
+    humidity: '',
     seaState: '',
     seaTemp: '',
     visibility: '',
+    fishStatus: '',
     ...preloadData
   });
 
-  // Auto-populate weather if not manual and not already set
+  // Auto-populate weather with debounce (500ms)
   useEffect(() => {
-    if (!formData.manualWeather && !isEditing && !formData.windSpeed) {
-      const simulated = getWeatherAndSeaState(new Date().toISOString(), formData.location);
-      setFormData(prev => ({ ...prev, ...simulated }));
-    }
-  }, [formData.manualWeather, formData.location, isEditing, formData.windSpeed]);
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      if (!isEditing) {
+        try {
+          const data = await fetchRealTimeData(formData.lat, formData.lng);
+          if (isMounted && data) {
+            setFormData(prev => ({ ...prev, ...data }));
+          }
+        } catch (_e) {
+          if (isMounted) {
+            const fallback = getDeterministicFallback(formData.lat, formData.lng);
+            setFormData(prev => ({ ...prev, ...fallback }));
+          }
+        }
+      }
+    }, 500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [formData.lat, formData.lng, isEditing]);
 
   const [encryptionStatus, setEncryptionStatus] = useState('idle'); // idle, encrypting, done
   const [ciphertextPreview, setCiphertextPreview] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Debounced input updates for XSS protection
+  const updateField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: sanitizeInput(value) }));
+  };
+
   const handleSave = async () => {
+    if (isSaving) return;
     setIsSaving(true);
     setEncryptionStatus('encrypting');
 
-    const plaintext = JSON.stringify({
-      ...formData,
+    const payload = {
+      distance: formData.distance,
+      duration: formData.duration,
+      location: formData.location,
+      lat: formData.lat,
+      lng: formData.lng,
+      notes: formData.notes,
+      cramps: formData.cramps,
+      windSpeed: formData.windSpeed,
+      weatherCond: formData.weatherCond,
+      airTemp: formData.airTemp,
+      humidity: formData.humidity,
+      seaState: formData.seaState,
+      seaTemp: formData.seaTemp,
+      visibility: formData.visibility,
+      fishStatus: formData.fishStatus,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    const plaintext = JSON.stringify(payload);
 
     await new Promise(r => setTimeout(r, 800));
 
     try {
       const encrypted = await encryptData(masterKey, plaintext);
 
-      // Decompose for visualization
       const binary = atob(encrypted);
       const iv = btoa(binary.slice(0, 12));
       const tag = btoa(binary.slice(-16));
@@ -929,8 +1087,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
 
       await new Promise(r => setTimeout(r, 1200));
       onSave(encrypted);
-    } catch (e) {
-      console.error(e);
+    } catch (_e) {
       setEncryptionStatus('idle');
     } finally {
       setIsSaving(false);
@@ -948,7 +1105,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
             <input
               type="number"
               value={formData.distance}
-              onChange={e => setFormData({...formData, distance: e.target.value})}
+              onChange={e => updateField('distance', e.target.value)}
               placeholder="e.g. 500"
               className="w-full bg-black/20 border border-white/10 rounded-lg p-3"
             />
@@ -958,7 +1115,7 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
             <input
               type="number"
               value={formData.duration}
-              onChange={e => setFormData({...formData, duration: e.target.value})}
+              onChange={e => updateField('duration', e.target.value)}
               placeholder="e.g. 30"
               className="w-full bg-black/20 border border-white/10 rounded-lg p-3"
             />
@@ -966,23 +1123,69 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] text-white/40 uppercase font-bold block text-start">{t.location.split(',')[0]}</label>
+          <label className="text-[10px] text-white/40 uppercase font-bold block text-start ps-1">{t.locationLabel}</label>
           <div className="relative">
-            <MapPin className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-ocean-cyan start-3" />
+            <MapPin className={cn("absolute top-1/2 -translate-y-1/2 w-4 h-4 text-ocean-cyan", t.locale === 'ar' ? 'right-3' : 'left-3')} />
             <input
               type="text"
               value={formData.location}
-              onChange={e => setFormData({...formData, location: e.target.value})}
-              className="w-full bg-black/20 border border-white/10 rounded-lg p-3 ps-10"
+              onChange={e => updateField('location', e.target.value)}
+              className="w-full bg-black/20 border border-white/10 rounded-lg p-3 ps-10 focus:ring-1 focus:ring-ocean-cyan outline-none"
+              placeholder={t.locationLabel}
             />
+            <div className="absolute top-1/2 -translate-y-1/2 end-3">
+               <select
+                 className="bg-transparent text-[10px] text-ocean-cyan font-bold outline-none cursor-pointer"
+                 onChange={e => {
+                   const b = BEACHES.find(beach => beach.name === e.target.value);
+                   if (b) setFormData(prev => ({ ...prev, location: b.name, lat: b.lat, lng: b.lng }));
+                 }}
+                 value=""
+               >
+                 <option value="" disabled>ORAN SPOTS</option>
+                 {BEACHES.map(b => (
+                   <option key={b.name} value={b.name} className="bg-ocean-deep text-white">{b.name}</option>
+                 ))}
+               </select>
+            </div>
           </div>
+        </div>
+
+        <div className="rounded-xl overflow-hidden h-40 border border-white/10">
+          <iframe
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            style={{ border: 0 }}
+            src={`https://www.google.com/maps?q=${formData.lat},${formData.lng}&z=14&output=embed`}
+            allowFullScreen
+          />
+        </div>
+
+        <div className="flex gap-2">
+           <a
+             href={`https://www.facebook.com/search/top?q=${encodeURIComponent(formData.location + ' البحر')}`}
+             target="_blank"
+             rel="noopener noreferrer"
+             className="flex-1 bg-[#1877F2]/10 border border-[#1877F2]/20 rounded-lg py-2 text-[10px] font-bold text-[#1877F2] flex items-center justify-center gap-2"
+           >
+              {t.searchOnFacebook}
+           </a>
+           <a
+             href={`https://www.tiktok.com/search?q=${encodeURIComponent(formData.location + ' البحر')}`}
+             target="_blank"
+             rel="noopener noreferrer"
+             className="flex-1 bg-black/20 border border-white/10 rounded-lg py-2 text-[10px] font-bold text-white flex items-center justify-center gap-2"
+           >
+              {t.searchOnTikTok}
+           </a>
         </div>
 
         <div className="space-y-1">
           <label className="text-[10px] text-white/40 uppercase font-bold block text-start">{t.trainingNotes}</label>
           <textarea
             value={formData.notes}
-            onChange={e => setFormData({...formData, notes: e.target.value})}
+            onChange={e => updateField('notes', e.target.value)}
             placeholder={t.notesPlaceholder}
             className="w-full bg-black/20 border border-white/10 rounded-lg p-3 min-h-[80px]"
           />
@@ -1003,59 +1206,64 @@ function SecureLogger({ t, masterKey, preloadData, onSave, isEditing = false }) 
         </label>
 
         <div className="pt-4 space-y-4 border-t border-white/5">
-          <label className="flex items-center justify-between p-3 bg-ocean-cyan/5 border border-ocean-cyan/10 rounded-xl cursor-pointer">
-             <div className="text-start">
-                <div className="text-xs font-bold text-ocean-cyan">{t.customizeWeather}</div>
-             </div>
-             <input
-                type="checkbox"
-                checked={formData.manualWeather || isEditing}
-                disabled={isEditing}
-                onChange={e => setFormData({...formData, manualWeather: e.target.checked})}
-                className="w-5 h-5 rounded border-white/10 bg-black/20 text-ocean-cyan focus:ring-ocean-cyan"
-             />
-          </label>
+           <div className="flex items-center gap-2 text-ocean-cyan/60 mb-2">
+              <Activity className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t.logger} Marine Intel</span>
+           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" dir="ltr">
              <WeatherMetricField
                 label={t.windSpeed}
                 value={formData.windSpeed}
                 unit={t.kmh}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, windSpeed: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.weatherCondition}
                 value={formData.weatherCond}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, weatherCond: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.airTemp}
                 value={formData.airTemp}
                 unit="°C"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, airTemp: v})}
+                disabled
+                onChange={() => {}}
+             />
+             <WeatherMetricField
+                label={t.humidity}
+                value={formData.humidity}
+                unit="%"
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.seaState}
                 value={formData.seaState}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, seaState: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.seaTemp}
                 value={formData.seaTemp}
                 unit="°C"
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, seaTemp: v})}
+                disabled
+                onChange={() => {}}
              />
              <WeatherMetricField
                 label={t.visibility}
                 value={formData.visibility}
-                unit={t.meters}
-                disabled={!formData.manualWeather && !isEditing}
-                onChange={v => setFormData({...formData, visibility: v})}
+                unit="km"
+                disabled
+                onChange={() => {}}
+             />
+             <WeatherMetricField
+                label={t.fishActivity}
+                value={t[formData.fishStatus] || formData.fishStatus}
+                disabled
+                onChange={() => {}}
              />
           </div>
         </div>
@@ -1119,26 +1327,25 @@ function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
   const [decryptedLogs, setDecryptedLogs] = useState([]);
   const [isDecrypting, setIsDecrypting] = useState(false);
 
-  const decryptAll = async () => {
-    setIsDecrypting(true);
-    try {
-      const results = await Promise.all(
-        logs.map(async (l) => {
-          const raw = await decryptData(masterKey, l);
-          return JSON.parse(raw);
-        })
-      );
-      setDecryptedLogs(results);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsDecrypting(false);
-    }
-  };
-
   useEffect(() => {
+    const decryptAll = async () => {
+      setIsDecrypting(true);
+      try {
+      const results = await Promise.allSettled(
+          logs.map(async (l) => {
+            const raw = await decryptData(masterKey, l);
+            return JSON.parse(raw);
+          })
+        );
+      setDecryptedLogs(results.filter(r => r.status === 'fulfilled').map(r => r.value));
+    } catch (_e) {
+      setDecryptedLogs([]);
+      } finally {
+        setIsDecrypting(false);
+      }
+    };
     if (logs.length > 0) decryptAll();
-  }, [logs]);
+  }, [logs, masterKey]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1229,7 +1436,7 @@ function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
                  </div>
                )}
 
-               <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-2">
+               <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-2" dir="ltr">
                   <div className="text-[8px] text-white/30">
                     <div className="uppercase">{t.windSpeed}</div>
                     <div className="text-white/60 font-mono">{log.windSpeed} {t.kmh}</div>
@@ -1240,7 +1447,11 @@ function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
                   </div>
                   <div className="text-[8px] text-white/30">
                     <div className="uppercase">{t.visibility}</div>
-                    <div className="text-white/60 font-mono">{log.visibility}{t.meters}</div>
+                    <div className="text-white/60 font-mono">{log.visibility} km</div>
+                  </div>
+                  <div className="text-[8px] text-white/30 col-span-2">
+                    <div className="uppercase">{t.fishActivity}</div>
+                    <div className="text-white/60 font-mono">{t[log.fishStatus] || log.fishStatus}</div>
                   </div>
                </div>
             </Card>

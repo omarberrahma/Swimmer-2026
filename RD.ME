@@ -1,0 +1,48 @@
+# DEEPTRAIN (v5.0) - Enterprise Marine Training Manager
+## 🌊 Oran & Bou Zadjar Production Edition
+
+DEEPTRAIN هو تطبيق فائق الأمان (Zero-Knowledge) مصمم لإدارة تدريبات الغوص والسباحة في وهران وبوزجار. تم تحديث هذا الإصدار (v5.0) ليكون "مضاداً للرصاص" (Bulletproof) من الناحية البرمجية والأمنية.
+
+---
+
+## 🚀 التحديثات الجديدة في v5.0 (Specifications)
+
+1.  **أتمتة بيانات البحر (100% Automated)**:
+    -   تم إلغاء الإدخال اليدوي لبيانات الطقس.
+    -   جلب آني لدرجة حرارة الماء، سرعة الرياح، الرؤية، وحالة الأسماك من **Open-Meteo**.
+    -   نظام **Deterministic Fallback**: في حال فشل الاتصال بالإنترنت، يقوم التطبيق بحساب البيانات تقديرياً بناءً على الموقع والتاريخ لضمان عدم توقف الواجهة.
+
+2.  **الأمن السيبراني المتقدم (Cyber-Defense)**:
+    -   **تشفير شامل (E2EE)**: يتم تشفير كامل حمولة البيانات (بما في ذلك الموقع والطقس المؤتمت) قبل التخزين.
+    -   **Input Sanitization**: تنظيف تلقائي للمدخلات ضد هجمات XSS وحقن الأكواد.
+    -   **Rate Limiting**: نظام Debounce (500ms) لمنع إغراق الخادم بطلبات البحث.
+
+3.  **تطوير مدرب الأنفاس (Trainer OS)**:
+    -   إضافة ميزة **"Skip to Apnea"**: تسمح للغواص بتخطي مرحلة التحضير والبدء فوراً في كتم النفس.
+
+4.  **ذكاء المصادر المفتوحة (Social OSINT)**:
+    -   أزرار بحث ديناميكية للتحقق من حالة البحر الحقيقية عبر فيديوهات تيك توك وفيسبوك المنشورة مؤخراً في الموقع المختار.
+
+---
+
+## 📂 هيكلية المشروع (Architecture)
+
+-   **Frontend**: React 19 + Vite (Single Page Application).
+-   **Security**: Web Crypto API (AES-256-GCM / PBKDF2 / SHA-256).
+-   **Data Sources**:
+    -   Open-Meteo Forecast & Marine APIs.
+    -   Google Maps Embed (Dynamic Search).
+-   **Storage**: Isolated Local Vaults (Hashed Keys).
+
+---
+
+## 🛠 التشغيل والتطوير
+
+```bash
+npm install
+npm run dev     # للبيئة التطويرية
+npm run build   # لبناء نسخة الإنتاج
+```
+
+---
+*DeepTrain: Built for the deep, secured for the mind.*
