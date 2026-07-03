@@ -10,19 +10,14 @@ import {
   Unlock,
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   Zap,
-  Info,
   Save,
   Trash2,
   Play,
   Square,
   RefreshCw,
-  Eye,
-  EyeOff,
   MapPin,
-  Stethoscope,
-  Globe
+  Stethoscope
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -372,55 +367,6 @@ async function fetchRealTimeData(lat, lng) {
 }
 
 /**
- * METEOROLOGICAL SIMULATOR (v3.1)
- * Deterministic weather based on date and spot.
- */
-function getWeatherAndSeaState(dateStr, spotId) {
-  const date = new Date(dateStr);
-  const month = date.getMonth(); // 0-11
-  const day = date.getDate();
-
-  // Hash function for pseudo-randomness based on date/spot
-  const seed = (month * 31 + day + spotId.length) % 100;
-
-  // Seasonal Air Temp Base
-  const airTempBase = [15, 16, 18, 22, 25, 28, 32, 33, 29, 24, 19, 16];
-  const airTemp = airTempBase[month] + (seed % 5) - 2;
-
-  // Seasonal Sea Temp Base
-  const seaTempBase = [15, 14, 15, 17, 19, 22, 24, 25, 23, 21, 18, 16];
-  const seaTemp = seaTempBase[month] + (seed % 2);
-
-  // Wind Speed (Deterministic)
-  const windSpeed = 5 + (seed % 25); // 5 to 30 km/h
-
-  // Weather Condition
-  let weatherCond = 'Sunny ☀️';
-  if (windSpeed > 22) weatherCond = 'Windy 💨';
-  else if (windSpeed > 15) weatherCond = 'Breezy 🍃';
-  else if (seed % 10 > 7) weatherCond = 'Cloudy ⛅';
-
-  // Sea State
-  let seaState = 'Calm 🌊';
-  if (windSpeed > 25) seaState = 'Rough 🚫';
-  else if (windSpeed > 15) seaState = 'Moderate Swell 🌊';
-
-  // Visibility (Base 20m, decays with rough sea)
-  let visibility = 20 - (windSpeed / 3);
-  if (seaState === 'Rough 🚫') visibility = Math.max(2, visibility - 5);
-  visibility = Math.round(visibility);
-
-  return {
-    windSpeed,
-    weatherCond,
-    airTemp,
-    seaState,
-    seaTemp,
-    visibility
-  };
-}
-
-/**
  * CRYPTOGRAPHY UTILITIES
  */
 const SALT = new TextEncoder().encode('bou-zadjar-salt-v1');
@@ -483,7 +429,7 @@ async function decryptData(key, ciphertext) {
       data
     );
     return new TextDecoder().decode(decrypted);
-  } catch (e) {
+  } catch (_e) {
     throw new Error('Decryption failed.');
   }
 }
@@ -544,7 +490,7 @@ export default function App() {
       if (saved) {
         try {
           setLogs(JSON.parse(saved));
-        } catch (e) {
+        } catch (_e) {
           console.error("Failed to load logs from storage");
           setLogs([]);
         }
@@ -574,7 +520,7 @@ export default function App() {
       setMasterKey(key);
       setUserHash(hash);
       setIsUnlocked(true);
-    } catch (err) {
+    } catch (_err) {
       setError(locale === 'ar' ? 'فشل الغاء القفل' : 'Unlock failed');
     } finally {
       setIsLoading(false);
@@ -761,7 +707,7 @@ function ApneaTrainer({ t, onLogSession }) {
   const [tableType, setTableType] = useState('CO2'); // CO2 or O2
   const [rounds, setRounds] = useState(8);
   const [baseHold, setBaseHold] = useState(120); // seconds
-  const [baseBreathe, setBaseBreathe] = useState(120); // seconds
+  const [baseBreathe] = useState(120); // seconds
 
   const [isActive, setIsActive] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
@@ -1276,26 +1222,25 @@ function TrainingHistory({ t, logs, masterKey, onEdit, onDelete }) {
   const [decryptedLogs, setDecryptedLogs] = useState([]);
   const [isDecrypting, setIsDecrypting] = useState(false);
 
-  const decryptAll = async () => {
-    setIsDecrypting(true);
-    try {
-      const results = await Promise.all(
-        logs.map(async (l) => {
-          const raw = await decryptData(masterKey, l);
-          return JSON.parse(raw);
-        })
-      );
-      setDecryptedLogs(results);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsDecrypting(false);
-    }
-  };
-
   useEffect(() => {
+    const decryptAll = async () => {
+      setIsDecrypting(true);
+      try {
+        const results = await Promise.all(
+          logs.map(async (l) => {
+            const raw = await decryptData(masterKey, l);
+            return JSON.parse(raw);
+          })
+        );
+        setDecryptedLogs(results);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsDecrypting(false);
+      }
+    };
     if (logs.length > 0) decryptAll();
-  }, [logs]);
+  }, [logs, masterKey]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
